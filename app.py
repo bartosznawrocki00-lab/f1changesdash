@@ -31,14 +31,13 @@ years = sorted(set(df.year) | set(subs.year), reverse=True)
 year = st.sidebar.selectbox("Sezon", years)
 season, season_subs = df[df.year == year], subs[subs.year == year]
 
-   # kolejność GP: wg kalendarza (fetch_fia.GP_SLUGS); nieznane na końcu, wg kolejności wczytania
-   from fetch_fia import GP_SLUGS
+# kolejność GP: wg kalendarza (fetch_fia.GP_SLUGS); nieznane na końcu, wg kolejności wczytania
+from fetch_fia import GP_SLUGS
 
-   CALENDAR = [s.replace("_", " ").replace("-", " ").title() + " Grand Prix" for s in GP_SLUGS]
-   seen = season_subs.sort_values("seq").grand_prix.drop_duplicates().tolist()
-   seen += [g for g in season.sort_values("seq").grand_prix.drop_duplicates() if g not in seen]
-   gp_order = sorted(seen, key=lambda g: CALENDAR.index(g) if g in CALENDAR else len(CALENDAR) + seen.index(g))
-
+CALENDAR = [s.replace("_", " ").replace("-", " ").title() + " Grand Prix" for s in GP_SLUGS]
+seen = season_subs.sort_values("seq").grand_prix.drop_duplicates().tolist()
+seen += [g for g in season.sort_values("seq").grand_prix.drop_duplicates() if g not in seen]
+gp_order = sorted(seen, key=lambda g: CALENDAR.index(g) if g in CALENDAR else len(CALENDAR) + seen.index(g))
 gp = st.sidebar.selectbox("Grand Prix", gp_order[::-1])  # najnowsze na górze
 teams = st.sidebar.multiselect("Zespoły", sorted(season.team.unique()))
 components = st.sidebar.multiselect("Komponenty", sorted(season.component.unique()))
