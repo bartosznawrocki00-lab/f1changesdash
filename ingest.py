@@ -1,4 +1,4 @@
-"""Wspólna logika: bajty PDF -> parser -> baza (z awaryjnym użyciem Claude'a)."""
+"""Wspólna logika: bajty PDF -> parser -> baza (z awaryjnym użyciem Claude'a, jeśli jest klucz)."""
 import os
 
 import db
@@ -11,20 +11,22 @@ def ingest_pdf_bytes(pdf_bytes, source_url="", year=None, gp=None):
     if not (year and gp and parsed["teams"]):
         raise ValueError("Nie rozpoznano formatu dokumentu.")
 
-    rows, failed = [], []
+    rows, subs, unread, warnings = [], [], [], []
     for t in parsed["teams"]:
         updates = t["updates"]
-        if t["needs_llm"]:
-            if not os.environ.get("ANTHROPIC_API_KEY"):
-                failed.append(t["team"])
-                continue
-            from extract import extract_upgrades
-            updates = [{"component": i["component"], "reason": "", "change_detail": "",
-                        "description": i["description"]} for i in extract_upgrades(t["text"])]
-        for u in updates:
-            rows.append({**u, "year": year, "grand_prix": gp, "team": t["team"], "source_url": source_url})
-        db.upsert_submission(year, gp, t["team"], len(updates), source_url)
+        if t["needs_llm"] and os.environ.get("ANTHROPIC_API_KEY"):
+            try:
+                from extract import extract_upgrades
+                updates = [{"component": i["component"], "reason": "", "change_detail": "",
+                            "description": i["description"]} for i in extract_upgrades(t["text"])]
+            except Exception as e:
+                warnings.append(f"{t['team']}: błąd odczytu przez LLM ({e})")
+        elif t["needs_llm"]:
+            (warnings if updates else unread).append(t["team"])
+        for k, u in enumerate(updates, 1):
+            rows.append({**u, "team": t["team"], "uid": f"{t['team']}#{k}"})
+        subs.append((t["team"], -1 if (t["needs_llm"] and not updates) else len(updates)))
 
-    new = db.upsert_upgrades(rows)
+    db.replace_event(year, gp, rows, subs, source_url)
     return {"year": year, "grand_prix": gp, "teams": len(parsed["teams"]),
-            "updates": len(rows), "new": new, "failed": failed}
+            "updates": len(rows), "unread": unread, "warnings": warnings}

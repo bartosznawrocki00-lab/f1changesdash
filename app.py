@@ -38,6 +38,7 @@ CALENDAR = [s.replace("_", " ").replace("-", " ").title() + " Grand Prix" for s 
 seen = season_subs.sort_values("seq").grand_prix.drop_duplicates().tolist()
 seen += [g for g in season.sort_values("seq").grand_prix.drop_duplicates() if g not in seen]
 gp_order = sorted(seen, key=lambda g: CALENDAR.index(g) if g in CALENDAR else len(CALENDAR) + seen.index(g))
+
 gp = st.sidebar.selectbox("Grand Prix", gp_order[::-1])  # najnowsze na górze
 teams = st.sidebar.multiselect("Zespoły", sorted(season.team.unique()))
 components = st.sidebar.multiselect("Komponenty", sorted(season.component.unique()))
@@ -48,6 +49,7 @@ if teams:
 if components:
     this_gp = this_gp[this_gp.component.isin(components)]
 no_change = season_subs[(season_subs.grand_prix == gp) & (season_subs.n_updates == 0)].team.tolist()
+unread = season_subs[(season_subs.grand_prix == gp) & (season_subs.n_updates < 0)].team.tolist()
 
 tab1, tab2, tab3 = st.tabs(["Ten weekend", "Cały sezon", "Historia zespołu"])
 
@@ -73,6 +75,9 @@ with tab1:
                     st.markdown(f"[źródło]({r.source_url})")
     if no_change:
         st.caption("Bez zmian w tym weekendzie: " + ", ".join(sorted(no_change)))
+    if unread:
+        st.warning("Nie udało się odczytać zgłoszenia zespołów: " + ", ".join(sorted(unread))
+                   + ". Sprawdź oryginalny dokument FIA.")
 
 with tab2:
     st.subheader(f"Liczba zmian na zespół – sezon {year}")

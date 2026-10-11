@@ -5,6 +5,7 @@ from pathlib import Path
 import db
 from fetch_fia import download, list_documents
 from ingest import ingest_pdf_bytes
+from parse_car_presentation import PARSER_VERSION
 
 MANUAL_CSV = Path(__file__).parent / "data" / "manual_upgrades.csv"
 
@@ -25,7 +26,7 @@ def main():
     print(f"Sprawdzam {len(docs)} możliwych dokumentów…")
     found = 0
     for doc in docs:  # kolejność kalendarza = kolejność w dashboardzie
-        if db.is_processed(doc["url"]):
+        if db.is_processed(doc["url"], PARSER_VERSION):
             continue
         try:
             pdf = download(doc["url"])
@@ -33,11 +34,10 @@ def main():
                 continue  # jeszcze nieopublikowany
             found += 1
             res = ingest_pdf_bytes(pdf, doc["url"], doc["year"], doc["grand_prix"])
-            if res["failed"]:
-                print(f"  {doc['grand_prix']}: nie odczytano {res['failed']} (brak ANTHROPIC_API_KEY?) – ponowię")
-                continue
-            db.mark_processed(doc["url"], doc["grand_prix"], doc["year"], res["updates"])
-            print(f"  {res['grand_prix']} {res['year']}: {res['updates']} zmian ({res['new']} nowych)")
+            db.mark_processed(doc["url"], doc["grand_prix"], doc["year"], res["updates"], PARSER_VERSION)
+            print(f"  {res['grand_prix']} {res['year']}: {res['updates']} zmian, {res['teams']} zespołów")
+            if res["unread"] or res["warnings"]:
+                print(f"    UWAGA – do sprawdzenia: nieodczytane={res['unread']} niepewne={res['warnings']}")
         except Exception as e:
             print(f"  BŁĄD przy {doc['url']}: {e}")
     print(f"Gotowe. Nowych dokumentów: {found}.")
