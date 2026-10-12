@@ -6,6 +6,7 @@ import db
 from fetch_fia import download, list_documents
 from ingest import ingest_pdf_bytes
 from parse_car_presentation import PARSER_VERSION
+import translate
 
 MANUAL_CSV = Path(__file__).parent / "data" / "manual_upgrades.csv"
 
@@ -40,6 +41,10 @@ def main():
                 print(f"    UWAGA – do sprawdzenia: nieodczytane={res['unread']} niepewne={res['warnings']}")
         except Exception as e:
             print(f"  BŁĄD przy {doc['url']}: {e}")
+    try:
+        print("Tłumaczenia:", translate.fill_missing())
+    except Exception as e:
+        print(f"  Tłumaczenie pominięte: {e}")
     print(f"Gotowe. Nowych dokumentów: {found}.")
 
 

@@ -2,6 +2,7 @@
 import sys
 
 import db
+import translate
 from ingest import ingest_pdf_bytes
 
 if __name__ == "__main__":
@@ -11,3 +12,4 @@ if __name__ == "__main__":
     with open(sys.argv[1], "rb") as f:
         res = ingest_pdf_bytes(f.read(), sys.argv[2] if len(sys.argv) > 2 else "")
     print(res)
+    print("Tłumaczenia:", translate.fill_missing())

@@ -1,11 +1,14 @@
-"""Dashboard Streamlit: zmiany w bolidach, weekend po weekendzie."""
+"""Dashboard Streamlit: zmiany w bolidach, weekend po weekendzie (PL / EN)."""
 import pandas as pd
 import streamlit as st
 
 import db
+from fetch_fia import GP_SLUGS
 
 st.set_page_config(page_title="F1 – zmiany w bolidach", page_icon="🏎️", layout="wide")
 db.init()
+
+TEXT_FIELDS = ("component", "reason", "change_detail", "description")
 
 
 @st.cache_data(ttl=300)
@@ -13,6 +16,9 @@ def load():
     with db.connect() as c:
         up = pd.read_sql_query("SELECT rowid AS seq, * FROM upgrades", c).fillna("")
         subs = pd.read_sql_query("SELECT rowid AS seq, * FROM submissions", c)
+    for f in TEXT_FIELDS:                      # starsze bazy bez kolumn _pl
+        if f + "_pl" not in up:
+            up[f + "_pl"] = ""
     return up, subs
 
 
@@ -27,13 +33,16 @@ if df.empty and subs.empty:
 if df.is_demo.any():
     st.warning("Widzisz dane DEMO (fikcyjne). Usuń je: `python seed_demo.py --clear`.")
 
+lang = st.sidebar.radio("Język / Language", ["Polski", "English"], horizontal=True)
+PL = lang == "Polski"
+for f in TEXT_FIELDS:                          # kolumny do wyświetlania: tłumaczenie, a gdy go brak – oryginał
+    df[f + "_v"] = df[f + "_pl"].where(df[f + "_pl"] != "", df[f]) if PL else df[f]
+
 years = sorted(set(df.year) | set(subs.year), reverse=True)
 year = st.sidebar.selectbox("Sezon", years)
 season, season_subs = df[df.year == year], subs[subs.year == year]
 
 # kolejność GP: wg kalendarza (fetch_fia.GP_SLUGS); nieznane na końcu, wg kolejności wczytania
-from fetch_fia import GP_SLUGS
-
 CALENDAR = [s.replace("_", " ").replace("-", " ").title() + " Grand Prix" for s in GP_SLUGS]
 seen = season_subs.sort_values("seq").grand_prix.drop_duplicates().tolist()
 seen += [g for g in season.sort_values("seq").grand_prix.drop_duplicates() if g not in seen]
@@ -41,13 +50,13 @@ gp_order = sorted(seen, key=lambda g: CALENDAR.index(g) if g in CALENDAR else le
 
 gp = st.sidebar.selectbox("Grand Prix", gp_order[::-1])  # najnowsze na górze
 teams = st.sidebar.multiselect("Zespoły", sorted(season.team.unique()))
-components = st.sidebar.multiselect("Komponenty", sorted(season.component.unique()))
+components = st.sidebar.multiselect("Komponenty", sorted(season.component_v.unique()), key=f"comp_{lang}")
 
 this_gp = season[season.grand_prix == gp]
 if teams:
     this_gp = this_gp[this_gp.team.isin(teams)]
 if components:
-    this_gp = this_gp[this_gp.component.isin(components)]
+    this_gp = this_gp[this_gp.component_v.isin(components)]
 no_change = season_subs[(season_subs.grand_prix == gp) & (season_subs.n_updates == 0)].team.tolist()
 unread = season_subs[(season_subs.grand_prix == gp) & (season_subs.n_updates < 0)].team.tolist()
 
@@ -66,18 +75,25 @@ with tab1:
         with st.container(border=True):
             st.markdown(f"### {team}")
             for _, r in g.iterrows():
-                st.markdown(f"**{r.component}**" + (f" · _{r.reason}_" if r.reason else ""))
-                if r.change_detail:
-                    st.caption(f"Zmiana: {r.change_detail}")
-                if r.description:
-                    st.write(r.description)
+                st.markdown(f"**{r.component_v}**" + (f" · _{r.reason_v}_" if r.reason_v else ""))
+                if r.change_detail_v:
+                    st.caption(("Zmiana: " if PL else "Change: ") + r.change_detail_v)
+                if r.description_v:
+                    st.write(r.description_v)
                 if r.source_url:
-                    st.markdown(f"[źródło]({r.source_url})")
+                    st.markdown(f"[{'źródło' if PL else 'source'}]({r.source_url})")
     if no_change:
         st.caption("Bez zmian w tym weekendzie: " + ", ".join(sorted(no_change)))
     if unread:
         st.warning("Nie udało się odczytać zgłoszenia zespołów: " + ", ".join(sorted(unread))
                    + ". Sprawdź oryginalny dokument FIA.")
+    if PL and not this_gp.empty:
+        missing = ((this_gp.description != "") & (this_gp.description_pl == "")).any()
+        translated = (this_gp.description_pl != "").any()
+        if translated:
+            st.caption("Opisy przetłumaczone maszynowo (Claude); źródłem jest dokument FIA.")
+        if missing:
+            st.caption("Część opisów nie ma jeszcze tłumaczenia – pokazano oryginał (angielski).")
 
 with tab2:
     st.subheader(f"Liczba zmian na zespół – sezon {year}")
@@ -97,8 +113,10 @@ with tab3:
     if hist.empty:
         st.write("Ten zespół nie zgłosił zmian w wczytanych weekendach.")
     else:
-        st.dataframe(hist[["grand_prix", "component", "reason", "change_detail", "description"]],
-                     width="stretch", hide_index=True)
+        view = hist[["grand_prix", "component_v", "reason_v", "change_detail_v", "description_v"]]
+        view.columns = (["Grand Prix", "Komponent", "Powód", "Zmiana", "Opis"] if PL
+                        else ["Grand Prix", "Component", "Reason", "Change", "Description"])
+        st.dataframe(view, width="stretch", hide_index=True)
 
-latest = max(df.added_at.max() if not df.empty else "", "")
+latest = df.added_at.max() if not df.empty else ""
 st.caption(f"Ostatnia aktualizacja bazy: {latest} UTC · dane: dokumenty FIA (Car Presentation Submissions)")

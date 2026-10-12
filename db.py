@@ -15,6 +15,10 @@ CREATE TABLE IF NOT EXISTS upgrades (
     description TEXT,
     reason      TEXT DEFAULT '',           -- 'Primary reason for update' z dokumentu FIA
     change_detail TEXT DEFAULT '',         -- 'Geometric differences compared to previous version'
+    component_pl TEXT DEFAULT '',          -- tłumaczenia na polski (słownik + Claude)
+    reason_pl   TEXT DEFAULT '',
+    change_detail_pl TEXT DEFAULT '',
+    description_pl TEXT DEFAULT '',
     source_url  TEXT,
     is_demo     INTEGER DEFAULT 0,
     added_at    TEXT DEFAULT CURRENT_TIMESTAMP
@@ -26,6 +30,10 @@ CREATE TABLE IF NOT EXISTS submissions (   -- każdy zespół z dokumentu, takż
     n_updates   INTEGER NOT NULL,
     source_url  TEXT,
     PRIMARY KEY (year, grand_prix, team)
+);
+CREATE TABLE IF NOT EXISTS tr_cache (       -- pamięć tłumaczeń: ten sam tekst nie jest tłumaczony dwa razy
+    src TEXT PRIMARY KEY,
+    pl  TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS processed_docs (
     url          TEXT PRIMARY KEY,
@@ -47,7 +55,7 @@ def init():
     with connect() as c:
         c.executescript(SCHEMA)
         cols = {r[1] for r in c.execute("PRAGMA table_info(upgrades)")}
-        for col in ("reason", "change_detail"):   # migracja starszych baz
+        for col in ("reason", "change_detail", "component_pl", "reason_pl", "change_detail_pl", "description_pl"):   # migracja starszych baz
             if col not in cols:
                 c.execute(f"ALTER TABLE upgrades ADD COLUMN {col} TEXT DEFAULT ''")
         pcols = {r[1] for r in c.execute("PRAGMA table_info(processed_docs)")}
